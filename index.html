@@ -1,472 +1,603 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>MotoHUD — Advanced Offline Speedometer</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>MotoHUD Pro — Advanced Offline Speedometer</title>
+<meta name="description" content="Offline-friendly advanced speedometer for trail riders. Multiple themes, analog gauge, trip export, lean detection, and more." />
 <style>
+  /* ---------- Root variables (will be swapped by themes) ---------- */
   :root{
-    --bg:#0b0b0c; --panel:#0f1720; --muted:#9aa4b2; --accent:#0fffb0; --danger:#ff5a5a;
-    --glass: rgba(255,255,255,0.04);
+    --bg:#071018; --panel:#0f1720; --muted:#a2b1be; --accent:#00ffc6; --danger:#ff6b6b; --glass: rgba(255,255,255,0.03);
+    --font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   }
-  body{margin:0;background:var(--bg);color:#e6eef6;font-family:Inter,Segoe UI,system-ui,Arial;display:flex;flex-direction:column;align-items:center;min-height:100vh;}
-  header{width:100%;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);backdrop-filter: blur(2px);}
-  h1{margin:0;font-size:18px;font-weight:600;}
-  .controls{display:flex;gap:8px;align-items:center;}
-  button, .chip{background:var(--panel);color:inherit;border:none;padding:8px 10px;border-radius:10px;cursor:pointer;font-size:14px;}
-  .chip{display:inline-flex;gap:8px;align-items:center;}
-  main{display:flex;flex:1;gap:14px;padding:14px;width:100%;max-width:1100px;box-sizing:border-box;}
-  .left, .right{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 6px 20px rgba(0,0,0,0.5);flex:1}
-  .left{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:360px}
-  #gaugeCanvas{width:100%;height:360px;max-width:560px}
-  #speedBig{font-size:72px;font-weight:700;margin-top:-30px;color:var(--accent)}
-  .unitSmall{font-size:18px;color:var(--muted)}
-  .stats{margin-top:10px;font-size:14px;line-height:1.6;color:var(--muted);text-align:left;width:100%}
-  .statRow{display:flex;justify-content:space-between;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent);margin-bottom:8px}
-  .barWrap{display:flex;gap:6px;align-items:center}
-  .bar{width:8px;height:18px;background:#334;border-radius:4px;opacity:0.35}
+  /* ---------- Base layout ---------- */
+  html,body{height:100%;margin:0;font-family:var(--font-family);background:var(--bg);color:#e7eef8;-webkit-font-smoothing:antialiased;}
+  .app{display:flex;flex-direction:column;min-height:100vh;align-items:center;padding:8px;box-sizing:border-box;}
+  header{width:100%;max-width:1240px;display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:12px;}
+  header h1{margin:0;font-size:18px;font-weight:700}
+  .controls{display:flex;gap:8px;align-items:center}
+
+  /* ---------- Main ---------- */
+  main{display:flex;gap:12px;width:100%;max-width:1240px;flex:1;margin-top:6px;box-sizing:border-box;}
+  .panel{background:var(--panel);border-radius:12px;padding:12px;box-shadow:0 6px 20px rgba(0,0,0,0.45);flex-basis:0}
+  .left{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:320px}
+  .right{width:360px;max-width:40%;display:flex;flex-direction:column;gap:10px}
+  .bigSpeed{font-size:76px;font-weight:800;color:var(--accent);line-height:1}
+  .unit{font-size:18px;opacity:0.85;margin-top:-8px;color:var(--muted)}
+  .small{font-size:13px;color:var(--muted)}
+
+  /* ---------- Gauge ---------- */
+  #gaugeWrap{width:100%;max-width:680px}
+  canvas{width:100%;height:auto;border-radius:10px;display:block;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+  .stats{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .statRow{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;background:var(--glass);font-size:14px;color:var(--muted)}
+
+  /* ---------- Buttons & inputs ---------- */
+  button{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.05));border:none;color:inherit;padding:8px 10px;border-radius:10px;cursor:pointer}
+  .primary{background:var(--accent);color:#001; font-weight:700}
+  .btnRow{display:flex;gap:8px}
+  select,input[type=number]{padding:8px;border-radius:8px;border:none;background:rgba(255,255,255,0.02);color:inherit;width:100%}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+
+  /* ---------- Settings panel (collapsible) ---------- */
+  #settingsPanel{position:fixed;right:14px;bottom:14px;z-index:1000;width:86%;max-width:420px;border-radius:12px;padding:10px;box-shadow:0 8px 30px rgba(0,0,0,0.65);transition:transform .22s;transform:translateY(0)}
+  #settingsPanel.hidden{transform:translateY(120%)}
+  .setting{margin-bottom:10px}
+
+  /* ---------- Trip history ---------- */
+  .tripsList{max-height:260px;overflow:auto;padding:6px;display:flex;flex-direction:column;gap:8px}
+  .tripCard{padding:8px;border-radius:8px;background:var(--glass);font-size:13px;display:flex;justify-content:space-between;align-items:center}
+
+  /* ---------- Signal bars ---------- */
+  .bars{display:flex;gap:6px;align-items:flex-end}
+  .bar{width:8px;background:rgba(255,255,255,0.07);border-radius:4px;height:12px;opacity:0.45}
   .bar.on{background:var(--accent);opacity:1}
-  .right{max-width:420px;display:flex;flex-direction:column;gap:12px}
-  .setting{display:flex;flex-direction:column;gap:6px}
-  label{font-size:13px;color:var(--muted)}
-  select,input[type=number]{padding:8px;border-radius:8px;border:none;background:rgba(255,255,255,0.03);color:inherit}
-  .bigBtn{padding:12px;border-radius:10px;font-weight:600}
-  footer{width:100%;padding:10px 16px;text-align:center;color:var(--muted);font-size:13px}
-  /* full screen tweaks */
-  :fullscreen body{background:#000}
-  /* mobile */
-  @media(max-width:900px){main{flex-direction:column;padding:10px} .left{min-width:auto} #gaugeCanvas{height:300px}}
-  /* night mode high contrast override */
-  .night { --bg:#000; --panel:#0b0b0d; --muted:#9aa4b2; --accent:#00ffcc; --danger:#ff6b6b; --glass: rgba(255,255,255,0.02); }
-  .light { --bg:#f6fbff; --panel:#ffffff; --muted:#334; --accent:#0066ff; --danger:#ff4d4d; --glass: rgba(0,0,0,0.04); color:#042; }
+
+  /* ---------- Responsive ---------- */
+  @media(max-width:980px){main{flex-direction:column}.right{width:100%;max-width:100%}#settingsPanel{left:8px;right:8px;width:auto}}
+  footer{font-size:12px;color:var(--muted);margin-top:10px;opacity:0.9}
+
+  /* ---------- Theme styles (A-E quick presets) ---------- */
+  body.theme-A { /* Apple CarPlay style - soft glass */ --bg:#071018; --panel:rgba(255,255,255,0.03); --muted:#c7d2da; --accent:#6ee7b7; --glass: rgba(255,255,255,0.03); }
+  body.theme-B { /* Motorcycle - neon */ --bg:#020202; --panel:#0b0b0b; --muted:#c0c7d3; --accent:#ff3b6b; --glass: rgba(255,255,255,0.02); }
+  body.theme-C { /* Aviation HUD */ --bg:#001004; --panel:#03120a; --muted:#9ad7c1; --accent:#39ff5a; --glass: rgba(255,255,255,0.02); }
+  body.theme-D { /* Material clean */ --bg:#f6f8fb; --panel:#ffffff; --muted:#44515b; --accent:#1f8bff; color:#042; }
+  body.theme-E { /* Tactical */ --bg:#071018; --panel:#081014; --muted:#9aa7b4; --accent:#00ffcc; --glass: rgba(255,255,255,0.02); }
 </style>
 </head>
-<body class="night">
+<body class="theme-A">
+<div class="app">
+  <header>
+    <h1>MotoHUD Pro</h1>
+    <div class="controls">
+      <div class="small" id="gpsStatus">GPS: --</div>
+      <button id="fsBtn" title="Full screen">Full</button>
+      <button id="openSettings" title="Open settings">Settings</button>
+    </div>
+  </header>
 
-<header>
-  <h1>MotoHUD</h1>
-  <div class="controls">
-    <div class="chip" id="gpsBars" title="GPS signal (accuracy)"><span id="gpsLabel">GPS</span></div>
-    <button id="fsBtn" title="Full screen">⤢ Full</button>
-    <button id="sensorEnable" class="chip" title="Enable phone sensors (for lean)"/>Enable Lean</button>
-    <button id="resetTrip" class="chip" title="Reset trip and distance">Reset Trip</button>
+  <main>
+    <section class="panel left">
+      <div id="gaugeWrap">
+        <canvas id="gauge" width="800" height="420"></canvas>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-top:6px;width:100%;justify-content:center">
+        <div style="text-align:center">
+          <div class="bigSpeed" id="bigSpeed">0</div>
+          <div class="unit" id="unitLabel">KM/H</div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="statRow"><div>Heading</div><div id="heading">0°</div></div>
+        <div class="statRow"><div>Altitude</div><div id="altitude">0 m</div></div>
+        <div class="statRow"><div>Accuracy</div><div id="accuracy">0 m</div></div>
+        <div class="statRow"><div>Lat / Lng</div><div id="latlng">-- , --</div></div>
+        <div class="statRow"><div>Trip Distance</div><div id="distance">0.00 km</div></div>
+        <div class="statRow"><div>Max Speed</div><div id="maxSpeed">0 km/h</div></div>
+        <div class="statRow"><div>Lean</div><div id="lean">0°</div></div>
+        <div class="statRow" style="align-items:center"><div>GPS Signal</div><div class="bars" id="signalBars"></div></div>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <div class="setting">
+        <label>UI Style (A–E)</label>
+        <select id="uiStyle">
+          <option value="A">A — Apple CarPlay</option>
+          <option value="B">B — Motorcycle / Neon</option>
+          <option value="C">C — Aviation HUD</option>
+          <option value="D">D — Material Clean</option>
+          <option value="E">E — Tactical</option>
+        </select>
+      </div>
+
+      <div class="setting">
+        <label>Units</label>
+        <select id="unitSelect"><option value="kmh">KM/H</option><option value="mph">MPH</option></select>
+      </div>
+
+      <div class="setting">
+        <label>Gauge style</label>
+        <select id="gaugeStyle"><option value="classic">Classic Dial</option><option value="neon">Neon Arc</option><option value="minimal">Minimal</option></select>
+      </div>
+
+      <div class="setting">
+        <label>Gauge Max (km/h)</label>
+        <input id="gaugeMax" type="number" min="40" max="300" value="160" />
+      </div>
+
+      <div class="setting">
+        <label>Smoothing (needle)</label>
+        <select id="smoothing"><option value="0.2">Low</option><option value="0.4" selected>Medium</option><option value="0.7">High</option></select>
+      </div>
+
+      <div class="setting">
+        <label>Update Rate (ms)</label>
+        <select id="updateRate"><option value="200">200ms</option><option value="500" selected>500ms</option><option value="1000">1s</option><option value="2000">2s</option></select>
+      </div>
+
+      <div class="setting">
+        <label>Battery Saver</label>
+        <select id="batterySaver"><option value="off">Off</option><option value="on">On (reduce GPS frequency)</option></select>
+      </div>
+
+      <div class="setting">
+        <label>Lean detection</label>
+        <div style="display:flex;gap:8px">
+          <button id="enableLean" class="primary">Enable</button>
+          <button id="disableLean">Disable</button>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label>Trip Control</label>
+        <div class="btnRow">
+          <button id="startTracking" class="primary">Start</button>
+          <button id="stopTracking">Stop</button>
+          <button id="resetTrip">Reset</button>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label>Trip Save / Export</label>
+        <div style="display:flex;gap:8px">
+          <button id="saveTrip">Save</button>
+          <button id="exportGPX">Export GPX</button>
+          <button id="exportCSV">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="setting">
+        <label>Trip History</label>
+        <div class="tripsList" id="tripsList"></div>
+      </div>
+
+      <div class="setting">
+        <label>Advanced</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="mirrorHUD">HUD Mirror</button>
+          <button id="clearMax">Clear Max</button>
+          <button id="clearAll">Clear All</button>
+        </div>
+        <small class="small">Settings saved locally in your browser.</small>
+      </div>
+    </aside>
+  </main>
+
+  <footer>Offline first · No external APIs · Works with GitHub Pages</footer>
+
+  <!-- Floating settings (for mobile) -->
+  <div id="settingsPanel" class="panel hidden">
+    <!-- duplicate some settings for quick mobile access -->
+    <div class="setting"><label>Theme quick</label><select id="uiStyle2"><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="D">D</option><option value="E">E</option></select></div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+      <button id="closeSettings" class="primary">Close</button>
+      <button id="openFullSettings">Open full</button>
+    </div>
   </div>
-</header>
-
-<main>
-  <section class="left">
-    <canvas id="gaugeCanvas" width="800" height="480"></canvas>
-    <div id="speedBig">0</div>
-    <div class="unitSmall" id="unitLabel">KM/H</div>
-
-    <div class="stats" style="max-width:720px;">
-      <div class="statRow"><div>Heading</div><div id="heading">0°</div></div>
-      <div class="statRow"><div>Altitude</div><div id="altitude">0 m</div></div>
-      <div class="statRow"><div>Accuracy</div><div id="accuracy">0 m</div></div>
-      <div class="statRow"><div>Lat / Lng</div><div id="latlng">0, 0</div></div>
-      <div class="statRow"><div>Distance (trip)</div><div id="distance">0.00 km</div></div>
-      <div class="statRow"><div>Max Speed</div><div id="maxSpeedDisplay">0 km/h</div></div>
-      <div class="statRow"><div>Lean Angle</div><div id="lean">0°</div></div>
-      <div class="statRow" style="align-items:center"><div>GPS Signal</div><div class="barWrap" id="signalBars"></div></div>
-    </div>
-  </section>
-
-  <aside class="right">
-    <div class="setting">
-      <label>Units</label>
-      <select id="unitSelect"><option value="kmh">KM/H</option><option value="mph">MPH</option></select>
-    </div>
-
-    <div class="setting">
-      <label>Gauge Max (top value on dial)</label>
-      <input id="gaugeMax" type="number" min="40" max="300" value="160" />
-    </div>
-
-    <div class="setting">
-      <label>Theme</label>
-      <select id="themeSelect"><option value="night">Night</option><option value="dark">Dark</option><option value="light">Light</option></select>
-    </div>
-
-    <div class="setting">
-      <label>Tracking</label>
-      <div style="display:flex;gap:8px">
-        <button id="startBtn" class="bigBtn">Start</button>
-        <button id="stopBtn" class="bigBtn">Stop</button>
-      </div>
-    </div>
-
-    <div class="setting">
-      <label>Trip & Max</label>
-      <div style="display:flex;gap:8px">
-        <button id="saveBtn" class="bigBtn">Save Trip</button>
-        <button id="clearMax" class="bigBtn">Reset Max</button>
-      </div>
-      <small style="color:var(--muted);">Trips and max speed saved in browser storage.</small>
-    </div>
-
-    <div style="margin-top:8px">
-      <small style="color:var(--muted)">Tip: allow location in high accuracy; enable sensors for lean detection (iOS requires user gesture to enable sensors).</small>
-    </div>
-  </aside>
-</main>
-
-<footer>Built for trail riding — offline friendly. Host on GitHub Pages (static). </footer>
+</div>
 
 <script>
-/* -------------------------
-   Utility & storage helpers
-   -------------------------*/
-const ls = (k,v) => v===undefined ? JSON.parse(localStorage.getItem(k)) : localStorage.setItem(k, JSON.stringify(v));
-const as = (k,v) => localStorage.setItem(k, v);
-const get = (k, fallback) => { const v = localStorage.getItem(k); return v===null?fallback:JSON.parse(v); };
+/* ==========================
+   MotoHUD Pro - single file
+   ==========================
+   Features:
+   - multiple UI themes A-E
+   - analog gauge (3 styles)
+   - smoothing, update rate, battery saver
+   - trip distance via Haversine
+   - save/export trips (GPX/CSV/JSON)
+   - lean detection (DeviceOrientation)
+   - localStorage for persistence
+   - GPS signal bars
+   - fullscreen, HUD mirror, reset/clear
+*/
 
-/* -------------------------
-   Settings & defaults
-   -------------------------*/
-let settings = get('moto_settings', {
+/* ---------- Utilities ---------- */
+const qs = (s,root=document) => root.querySelector(s);
+const qsa = (s,root=document) => Array.from(root.querySelectorAll(s));
+const fmt = n => (Math.round(n*100)/100).toFixed(2);
+
+/* ---------- Storage helpers ---------- */
+const getJSON = (k, fallback) => {
+  try{
+    const v = localStorage.getItem(k);
+    return v ? JSON.parse(v) : fallback;
+  }catch(e){ return fallback; }
+};
+const setJSON = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+
+/* ---------- Settings defaults ---------- */
+let appState = getJSON('motoPro_state', {
+  uiStyle: 'A',
   unit: 'kmh',
+  gaugeStyle: 'classic',
   gaugeMax: 160,
-  theme: 'night',
+  smoothing: 0.4,
+  updateRate: 500,
+  batterySaver: 'off',
   leanEnabled: false,
-  tracking: false
+  tracking: false,
+  trips: []
 });
 
-document.getElementById('unitSelect').value = settings.unit;
-document.getElementById('gaugeMax').value = settings.gaugeMax;
-document.getElementById('themeSelect').value = settings.theme;
-document.getElementById('unitLabel').innerText = settings.unit.toUpperCase();
-document.body.className = settings.theme === 'night' ? 'night' : (settings.theme === 'light' ? 'light' : '');
+/* Sync UI from stored state */
+function applyStateToUI(){
+  qs('#uiStyle').value = appState.uiStyle;
+  qs('#uiStyle2').value = appState.uiStyle;
+  document.body.className = 'theme-' + appState.uiStyle;
+  qs('#unitSelect').value = appState.unit;
+  qs('#gaugeStyle').value = appState.gaugeStyle;
+  qs('#gaugeMax').value = appState.gaugeMax;
+  qs('#smoothing').value = appState.smoothing;
+  qs('#updateRate').value = appState.updateRate;
+  qs('#batterySaver').value = appState.batterySaver;
+  qs('#unitLabel').innerText = appState.unit.toUpperCase();
+}
+applyStateToUI();
 
-function saveSettings(){
-  as('moto_settings', settings);
+/* ---------- DOM helpers ---------- */
+function setSignalBars(level){
+  const wrap = qs('#signalBars'); wrap.innerHTML = '';
+  for(let i=1;i<=5;i++){
+    const bar = document.createElement('div'); bar.className = 'bar' + (i<=level? ' on' : '');
+    bar.style.height = (8 + i*6) + 'px';
+    wrap.appendChild(bar);
+  }
+  qs('#gpsStatus').innerText = level? `GPS: ${level}` : 'GPS: no';
 }
 
-/* -------------------------
-   Canvas gauge rendering
-   -------------------------*/
-const canvas = document.getElementById('gaugeCanvas');
-const ctx = canvas.getContext('2d');
-
-function dprAdjust(){
+/* ---------- Gauge rendering ---------- */
+const canvas = qs('#gauge'); const ctx = canvas.getContext('2d');
+function resizeCanvas(){
   const ratio = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * ratio;
   canvas.height = canvas.clientHeight * ratio;
   ctx.setTransform(ratio,0,0,ratio,0,0);
 }
-dprAdjust();
-window.addEventListener('resize', dprAdjust);
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 
-function drawGauge(speed){
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  const cx = w/2;
-  const cy = h*0.68;
-  const radius = Math.min(w, h)*0.38;
+function drawDial(speedDisplay){
+  const w = canvas.clientWidth; const h = canvas.clientHeight;
+  const cx = w/2; const cy = h*0.7; const radius = Math.min(w,h)*0.36;
   ctx.clearRect(0,0,w,h);
 
-  // Outer ring
+  // background arc
   ctx.beginPath();
-  ctx.arc(cx, cy, radius+18, Math.PI, 0, false);
-  ctx.lineWidth = 8;
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-  ctx.stroke();
+  ctx.arc(cx,cy,radius+18,Math.PI,0,false);
+  ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.stroke();
 
-  // Tick marks + numbers
-  const max = settings.gaugeMax;
-  const ticks = 10;
-  ctx.font = '12px system-ui';
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  // ticks & numbers
+  const max = Number(appState.gaugeMax) || 160; const ticks = 10;
+  ctx.font = '12px system-ui'; ctx.fillStyle = 'rgba(255,255,255,0.75)';
   for(let i=0;i<=ticks;i++){
-    const t = i/ticks;
-    const ang = Math.PI + (1 - t) * Math.PI; // from left (180deg) to right (0deg)
-    const x1 = cx + Math.cos(ang) * (radius+6);
-    const y1 = cy + Math.sin(ang) * (radius+6);
-    const x2 = cx + Math.cos(ang) * (radius-8);
-    const y2 = cy + Math.sin(ang) * (radius-8);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-
-    // numbers
+    const t = i/ticks; const ang = Math.PI + (1 - t)*Math.PI; 
+    const x1 = cx + Math.cos(ang)*(radius+6); const y1 = cy + Math.sin(ang)*(radius+6);
+    const x2 = cx + Math.cos(ang)*(radius-8); const y2 = cy + Math.sin(ang)*(radius-8);
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     const val = Math.round(max * t);
-    const nx = cx + Math.cos(ang) * (radius - 30);
-    const ny = cy + Math.sin(ang) * (radius - 30) + 4;
-    ctx.fillText(val, nx - ctx.measureText(val).width/2, ny);
+    const nx = cx + Math.cos(ang)*(radius-30); const ny = cy + Math.sin(ang)*(radius-30)+4;
+    ctx.fillText(val, nx-ctx.measureText(val).width/2, ny);
   }
 
-  // colored arc proportional to speed
-  const pct = Math.min(speed / max, 1);
-  ctx.beginPath();
-  ctx.lineWidth = 12;
-  const start = Math.PI;
-  const end = Math.PI + (1 - (1 - pct)) * Math.PI; // map 0..1 to PI..0
-  // gradient
-  const grad = ctx.createLinearGradient(cx-radius, cy, cx+radius, cy);
-  grad.addColorStop(0, '#00ff88'); grad.addColorStop(0.6, '#fff24a'); grad.addColorStop(1, '#ff6b6b');
-  ctx.strokeStyle = grad;
-  ctx.arc(cx, cy, radius, Math.PI, Math.PI + Math.PI * pct, false);
+  // arc color
+  const pct = Math.min(speedDisplay / max, 1);
+  const grad = ctx.createLinearGradient(cx-radius,cy,cx+radius,cy);
+  grad.addColorStop(0,'#00ff88'); grad.addColorStop(0.6,'#fff24a'); grad.addColorStop(1,'#ff6b6b');
+  ctx.beginPath(); ctx.lineWidth = 12; ctx.strokeStyle = grad;
+  ctx.arc(cx,cy,radius,Math.PI,Math.PI + Math.PI*pct,false);
   ctx.stroke();
 
-  // Needle
-  const needleAngle = Math.PI + (1 - pct) * Math.PI;
-  const nx = cx + Math.cos(needleAngle) * (radius - 40);
-  const ny = cy + Math.sin(needleAngle) * (radius - 40);
-  // base shadow
-  ctx.beginPath();
-  ctx.arc(cx, cy, 8, 0, Math.PI*2);
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fill();
   // needle
-  ctx.beginPath();
-  ctx.moveTo(cx, cy);
-  ctx.lineTo(nx, ny);
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = '#fff';
-  ctx.stroke();
-
-  // center dot
-  ctx.beginPath(); ctx.arc(cx, cy, 6, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+  const needleAngle = Math.PI + (1 - pct)*Math.PI; const nx = cx + Math.cos(needleAngle)*(radius-40); const ny = cy + Math.sin(needleAngle)*(radius-40);
+  ctx.beginPath(); ctx.arc(cx,cy,8,0,Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(nx,ny); ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
 }
 
-/* -------------------------
-   GPS / tracking logic
-   -------------------------*/
+/* simple minimal gauge style */
+function drawMinimal(speedDisplay){
+  ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+  const w = canvas.clientWidth; const h = canvas.clientHeight;
+  ctx.font = 'bold 120px system-ui'; ctx.textAlign='center'; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#0ff';
+  ctx.fillText(speedDisplay, w/2, h/2+20);
+}
+
+/* neon arc style */
+function drawNeon(speedDisplay){
+  // reuse drawDial but with glow
+  drawDial(speedDisplay);
+  // extra glow
+  ctx.globalAlpha = 0.12; ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#0ff';
+  ctx.fillRect(0,0,canvas.clientWidth,10); ctx.globalAlpha = 1;
+}
+
+/* choose renderer */
+function renderGauge(speedDisplay){
+  const style = appState.gaugeStyle;
+  if(style === 'classic') drawDial(speedDisplay);
+  else if(style === 'minimal') drawMinimal(speedDisplay);
+  else drawNeon(speedDisplay);
+}
+
+/* ---------- GPS & Trip tracking ---------- */
 let watchId = null;
-let lastPos = null;
-let totalDistance = get('moto_trip_distance', 0); // meters
-let maxSpeed = get('moto_max_speed', 0); // in unit units (km/h or mph? we'll store in km/h)
-let maxLean = get('moto_max_lean', 0); // degrees
+let lastPosition = null;
+let totalDistance = getJSON('motoPro_distance', 0); // meters
 let smoothedSpeed = 0;
+let maxSpeed = getJSON('motoPro_maxSpeed', 0); // km/h stored
+let maxLean = getJSON('motoPro_maxLean', 0);
+let lastUpdate = 0;
+let tripPoints = getJSON('motoPro_tripPoints', []); // store {lat,lng,t}
 
-function toDisplaySpeed(ms) {
-  if(ms === null) return 0;
-  if(settings.unit === 'mph') return ms * 2.23694;
-  return ms * 3.6;
+function toDisplay(ms){
+  if(appState.unit === 'mph') return Math.round(ms * 2.23694);
+  return Math.round(ms * 3.6);
 }
-function toMetersPerSec(displaySpeed){ // when given km/h or mph? we won't need reverse much
-  return displaySpeed / (settings.unit==='mph' ? 2.23694 : 3.6);
-}
+function toKmh(ms){ return ms * 3.6; }
 
-function haversine(lat1, lon1, lat2, lon2){
-  const R = 6371000;
-  const toRad = Math.PI/180;
-  const dLat = (lat2-lat1)*toRad;
-  const dLon = (lon2-lon1)*toRad;
+function haversine(lat1,lon1,lat2,lon2){
+  const R = 6371000; const toRad = Math.PI/180;
+  const dLat = (lat2-lat1)*toRad; const dLon = (lon2-lon1)*toRad;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*toRad)*Math.cos(lat2*toRad) * Math.sin(dLon/2)**2;
   const c = 2*Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  return R * c;
+  return R*c;
 }
 
-function updateGPS(pos){
+/* update UI and storage based on position */
+function handlePosition(pos){
+  const now = Date.now();
+  // throttle UI updates based on updateRate
+  if(now - lastUpdate < Number(appState.updateRate)) return;
+  lastUpdate = now;
+
   const coords = pos.coords;
-  const lat = coords.latitude, lon = coords.longitude;
+  const lat = coords.latitude; const lon = coords.longitude;
   const acc = coords.accuracy || 999;
   const alt = coords.altitude || 0;
   const heading = coords.heading || 0;
-  let speed = coords.speed; // m/s may be null
-  if(speed === null || speed < 0) speed = 0;
+  let speed = coords.speed; if(speed === null || speed < 0) speed = 0;
 
-  // smoothing speed (ema)
-  smoothedSpeed = smoothedSpeed * 0.7 + speed * 0.3;
+  // smoothing (EMA)
+  const s = Number(appState.smoothing);
+  smoothedSpeed = (smoothedSpeed * (1 - s)) + (speed * s);
 
   // distance calc
-  if(lastPos && acc < 40 && lastPos.coords.accuracy < 40){
-    const d = haversine(lastPos.coords.latitude, lastPos.coords.longitude, lat, lon);
-    // only add if speed > 0.6 m/s and accuracy reasonable
-    if((speed > 0.6 || smoothedSpeed > 0.6) && acc < 40){
+  if(lastPosition && acc < 40 && lastPosition.coords.accuracy < 40){
+    const d = haversine(lastPosition.coords.latitude, lastPosition.coords.longitude, lat, lon);
+    if((speed > 0.5 || smoothedSpeed > 0.5) && acc < 40) {
       totalDistance += d;
-      as('moto_trip_distance', totalDistance);
+      setJSON('motoPro_distance', totalDistance);
     }
   }
 
-  lastPos = pos;
-  // max speed (store in km/h for consistency)
-  const displayKmh = speed * 3.6;
-  if(displayKmh > maxSpeed) { maxSpeed = displayKmh; as('moto_max_speed', maxSpeed); }
+  // store trip points for export
+  tripPoints.push({lat,lon,alt,ts: now});
+  setJSON('motoPro_tripPoints', tripPoints);
 
-  // update UI
-  const dispSpeed = Math.round(toDisplaySpeed(smoothedSpeed));
-  document.getElementById('speedBig').innerText = dispSpeed;
-  document.getElementById('unitLabel').innerText = settings.unit.toUpperCase();
-  document.getElementById('heading').innerText = Math.round(heading) + '°';
-  document.getElementById('altitude').innerText = Math.round(alt) + ' m';
-  document.getElementById('accuracy').innerText = Math.round(acc) + ' m';
-  document.getElementById('latlng').innerText = lat.toFixed(6) + ', ' + lon.toFixed(6);
-  document.getElementById('distance').innerText = (settings.unit === 'mph' ? (totalDistance/1609.344).toFixed(2) + ' mi' : (totalDistance/1000).toFixed(2) + ' km');
-  document.getElementById('maxSpeedDisplay').innerText = Math.round(settings.unit==='mph' ? maxSpeed/1.609344 : maxSpeed) + ' ' + (settings.unit === 'mph' ? 'MPH' : 'KM/H');
+  // max speed store in km/h for consistency
+  const kmh = toKmh(speed);
+  if(kmh > maxSpeed){ maxSpeed = kmh; setJSON('motoPro_maxSpeed', maxSpeed); }
 
-  // GPS signal bars
-  updateSignalBars(acc);
-
-  // Gauge draw
-  const gaugeSpeed = settings.unit === 'mph' ? dispSpeed : dispSpeed;
-  drawGauge(dispSpeed);
-}
-
-function updateSignalBars(accuracy){
-  const barContainer = document.getElementById('signalBars');
-  barContainer.innerHTML = '';
-  // thresholds (m): excellent<5, good<10, fair<25, poor<50, bad>50
+  // GPS signal bars (accuracy)
   let level = 0;
-  if(accuracy <= 5) level = 5;
-  else if(accuracy <= 10) level = 4;
-  else if(accuracy <= 25) level = 3;
-  else if(accuracy <= 50) level = 2;
-  else if(accuracy <= 100) level = 1;
-  else level = 0;
-  for(let i=1;i<=5;i++){
-    const bar = document.createElement('div'); bar.className = 'bar' + (i <= level ? ' on' : '');
-    barContainer.appendChild(bar);
-  }
-  document.getElementById('gpsLabel').innerText = level > 0 ? `GPS (${level})` : 'GPS (no)';
+  if(acc <=5) level=5; else if(acc<=10) level=4; else if(acc<=25) level=3; else if(acc<=50) level=2; else if(acc<=100) level=1; else level=0;
+  setSignalBars(level);
+
+  // update UI fields
+  qs('#bigSpeed').innerText = toDisplay(smoothedSpeed);
+  qs('#unitLabel').innerText = appState.unit.toUpperCase();
+  qs('#heading').innerText = Math.round(heading) + '°';
+  qs('#altitude').innerText = Math.round(alt) + ' m';
+  qs('#accuracy').innerText = Math.round(acc) + ' m';
+  qs('#latlng').innerText = lat.toFixed(6) + ' , ' + lon.toFixed(6);
+  qs('#distance').innerText = appState.unit === 'mph' ? (totalDistance/1609.344).toFixed(2) + ' mi' : (totalDistance/1000).toFixed(2) + ' km';
+  qs('#maxSpeed').innerText = Math.round(appState.unit === 'mph' ? maxSpeed/1.609344 : maxSpeed) + ' ' + (appState.unit==='mph'?'MPH':'KM/H');
+
+  // gauge render
+  renderGauge(toDisplay(smoothedSpeed));
+
+  lastPosition = pos;
 }
 
-/* -------------------------
-   Start/stop tracking
-   -------------------------*/
-function startTracking(){
+/* ---------- GPS start/stop ---------- */
+function startGPS(){
   if(watchId !== null) return;
-  settings.tracking = true; saveSettings();
-  watchId = navigator.geolocation.watchPosition(updateGPS, (err) => {
-    console.warn('GPS error', err);
-  }, { enableHighAccuracy: true, maximumAge: 500, timeout: 8000 });
+  if(!navigator.geolocation){ alert('Geolocation not supported'); return; }
+  const opts = { enableHighAccuracy: true, maximumAge: appState.batterySaver==='on' ? 2000 : 500, timeout: 10000 };
+  watchId = navigator.geolocation.watchPosition(handlePosition, (err)=>console.warn('gps err',err), opts);
+  appState.tracking = true; setJSON('motoPro_state', appState);
+  qs('#startTracking').disabled = true; qs('#stopTracking').disabled = false;
 }
-
-function stopTracking(){
+function stopGPS(){
   if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; }
-  settings.tracking = false; saveSettings();
+  appState.tracking = false; setJSON('motoPro_state', appState);
+  qs('#startTracking').disabled = false; qs('#stopTracking').disabled = true;
 }
 
-/* -------------------------
-   Lean detection (DeviceOrientation)
-   -------------------------*/
-let leanListener = null;
-let currentLean = 0;
-function enableLeanSensors(){
-  // iOS 13+ requires permission API
-  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
-    DeviceOrientationEvent.requestPermission().then(res=>{
-      if(res === 'granted') attachLeanListener();
-      else alert('Device orientation permission denied.');
-    }).catch(()=>alert('Device orientation permission failed.'));
-  } else {
-    attachLeanListener();
-  }
-}
-
-function attachLeanListener(){
+/* ---------- Lean detection ---------- */
+let leanListener = null; let currentLean = 0;
+function enableLean(){
   if(leanListener) return;
+  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    // iOS
+    DeviceOrientationEvent.requestPermission().then(res=>{
+      if(res === 'granted') attachLean();
+      else alert('Lean permission denied');
+    }).catch(()=>alert('Lean permission error'));
+  } else attachLean();
+}
+function attachLean(){
   leanListener = (ev) => {
-    // gamma: left-right tilt, beta: front-back
-    const gamma = ev.gamma || 0; // -90..90 (left/right)
+    const gamma = ev.gamma || 0;
     currentLean = Math.abs(gamma);
-    if(currentLean > maxLean){ maxLean = currentLean; as('moto_max_lean', maxLean); }
-    document.getElementById('lean').innerText = Math.round(currentLean) + '° (max ' + Math.round(maxLean) + '°)';
+    if(currentLean > maxLean){ maxLean = currentLean; setJSON('motoPro_maxLean', maxLean); }
+    qs('#lean').innerText = Math.round(currentLean) + '° (max ' + Math.round(maxLean) + '°)';
   };
   window.addEventListener('deviceorientation', leanListener);
-  settings.leanEnabled = true; saveSettings();
+  appState.leanEnabled = true; setJSON('motoPro_state', appState);
+}
+function disableLean(){
+  if(leanListener){ window.removeEventListener('deviceorientation', leanListener); leanListener = null; }
+  appState.leanEnabled = false; setJSON('motoPro_state', appState);
 }
 
-/* -------------------------
-   UI Wiring
-   -------------------------*/
-document.getElementById('unitSelect').addEventListener('change', (e)=>{
-  settings.unit = e.target.value; saveSettings();
-  document.getElementById('unitLabel').innerText = settings.unit.toUpperCase();
-});
-
-document.getElementById('gaugeMax').addEventListener('change',(e)=>{
-  settings.gaugeMax = Number(e.target.value) || 160; saveSettings();
-});
-
-document.getElementById('themeSelect').addEventListener('change',(e)=>{
-  settings.theme = e.target.value; saveSettings();
-  document.body.className = settings.theme === 'night' ? 'night' : (settings.theme === 'light' ? 'light' : '');
-});
-
-document.getElementById('startBtn').addEventListener('click', ()=>{
-  startTracking();
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('stopBtn').disabled = false;
-});
-document.getElementById('stopBtn').addEventListener('click', ()=>{
-  stopTracking();
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('stopBtn').disabled = true;
-});
-
-// initial start/stop state
-if(settings.tracking){ startTracking(); document.getElementById('startBtn').disabled = true; } else { document.getElementById('stopBtn').disabled = true; }
-
-document.getElementById('sensorEnable').addEventListener('click', ()=>{
-  enableLeanSensors();
-  document.getElementById('sensorEnable').innerText = 'Lean Enabled';
-  document.getElementById('sensorEnable').disabled = true;
-});
-
-document.getElementById('fsBtn').addEventListener('click', async ()=>{
-  try{
-    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
-    else await document.exitFullscreen();
-  }catch(e){ console.warn('Fullscreen failed', e); }
-});
-
-document.getElementById('resetTrip').addEventListener('click', ()=>{
-  if(!confirm('Reset trip distance and last position?')) return;
-  totalDistance = 0; lastPos = null; as('moto_trip_distance', totalDistance);
-  document.getElementById('distance').innerText = '0.00 km';
-});
-
-document.getElementById('clearMax').addEventListener('click', ()=>{
-  maxSpeed = 0; as('moto_max_speed', maxSpeed); document.getElementById('maxSpeedDisplay').innerText = '0 ' + (settings.unit==='mph' ? 'MPH' : 'KM/H');
-  maxLean = 0; as('moto_max_lean', maxLean); document.getElementById('lean').innerText = '0°';
-});
-
-document.getElementById('saveBtn').addEventListener('click', ()=>{
-  // Save a snapshot of the trip to localStorage savedTrips
-  const trips = get('moto_saved_trips', []);
-  const t = {
+/* ---------- Trip save & export ---------- */
+function saveTrip(){
+  const trips = getJSON('motoPro_trips', []);
+  const trip = {
+    id: Date.now(),
     date: new Date().toISOString(),
     distance_m: totalDistance,
     maxSpeed_kmh: maxSpeed,
     maxLean_deg: maxLean,
-    unit: settings.unit
+    points: tripPoints.slice(),
+    unit: appState.unit
   };
-  trips.push(t);
-  as('moto_saved_trips', trips);
-  alert('Trip saved to browser storage (' + trips.length + ' saved).');
-});
-
-/* -------------------------
-   restore stored values displayed
-   -------------------------*/
-totalDistance = get('moto_trip_distance', 0);
-maxSpeed = get('moto_max_speed', 0) || 0;
-maxLean = get('moto_max_lean', 0) || 0;
-document.getElementById('distance').innerText = (settings.unit === 'mph' ? (totalDistance/1609.344).toFixed(2) + ' mi' : (totalDistance/1000).toFixed(2) + ' km');
-document.getElementById('maxSpeedDisplay').innerText = Math.round(settings.unit==='mph' ? maxSpeed/1.609344 : maxSpeed) + ' ' + (settings.unit === 'mph' ? 'MPH' : 'KM/H');
-document.getElementById('lean').innerText = Math.round(maxLean) + '°';
-
-/* -------------------------
-   small autosave / UI loop
-   -------------------------*/
-setInterval(()=>{ // update gauge with current smoothedSpeed even without new GPS event
-  drawGauge(Math.round(toDisplaySpeed(smoothedSpeed)));
-}, 200);
-
-/* -------------------------
-   Ask for permissions / warm start
-   -------------------------*/
-if(navigator.permissions){
-  navigator.permissions.query({name:'geolocation'}).then(p=>{
-    if(p.state === 'granted'){ /* do nothing - user already allowed */ }
+  trips.push(trip); setJSON('motoPro_trips', trips); appState.trips = trips; setJSON('motoPro_state',appState);
+  renderTrips();
+  alert('Trip saved locally');
+}
+function exportGPX(){
+  if(tripPoints.length === 0){ alert('No trip points to export'); return; }
+  const name = 'moto_trip_' + new Date().toISOString().replace(/[:.]/g,'-') + '.gpx';
+  let gpx = '<?xml version="1.0"?>\n<gpx version="1.1" creator="MotoHUD Pro" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>'+name+'</name><trkseg>\n';
+  tripPoints.forEach(p => {
+    gpx += `<trkpt lat="${p.lat}" lon="${p.lon}"><ele>${p.alt||0}</ele><time>${new Date(p.ts).toISOString()}</time></trkpt>\n`;
   });
+  gpx += '</trkseg></trk>\n</gpx>';
+  downloadString(gpx, 'application/gpx+xml', name);
+}
+function exportCSV(){
+  if(tripPoints.length === 0){ alert('No trip points to export'); return; }
+  const name = 'moto_trip_' + Date.now() + '.csv';
+  let csv = 'lat,lon,alt,ts\n';
+  tripPoints.forEach(p => csv += `${p.lat},${p.lon},${p.alt||0},${new Date(p.ts).toISOString()}\n`);
+  downloadString(csv, 'text/csv', name);
 }
 
-// draw initial gauge
-drawGauge(0);
+function downloadString(text, type, name){
+  const blob = new Blob([text], {type});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); URL.revokeObjectURL(url);
+}
 
-/* Optional: prompt user to click Start to enable sensors on iOS */
+/* ---------- Trip history UI ---------- */
+function renderTrips(){
+  const wrap = qs('#tripsList'); wrap.innerHTML = '';
+  const trips = getJSON('motoPro_trips', []);
+  trips.reverse().forEach(t=>{
+    const el = document.createElement('div'); el.className='tripCard';
+    el.innerHTML = `<div><strong>${new Date(t.date).toLocaleString()}</strong><div class="small">${(t.distance_m/1000).toFixed(2)} km · max ${Math.round(t.maxSpeed_kmh)} km/h</div></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="small" data-id="${t.id}" onclick="window.moto_loadTrip(${t.id})">Load</button>
+        <button class="small" data-id="${t.id}" onclick="window.moto_deleteTrip(${t.id})">Delete</button>
+      </div>`;
+    wrap.appendChild(el);
+  });
+}
+window.moto_loadTrip = function(id){
+  const trips = getJSON('motoPro_trips', []);
+  const t = trips.find(x=>x.id===id);
+  if(!t) return alert('Trip not found');
+  // load into current tripPoints (append)
+  tripPoints = t.points.slice();
+  setJSON('motoPro_tripPoints', tripPoints);
+  totalDistance = t.distance_m; setJSON('motoPro_distance', totalDistance);
+  maxSpeed = t.maxSpeed_kmh; setJSON('motoPro_maxSpeed', maxSpeed);
+  alert('Trip loaded. You can now export it.');
+  qs('#distance').innerText = (appState.unit==='mph' ? (totalDistance/1609.344).toFixed(2)+' mi' : (totalDistance/1000).toFixed(2)+' km');
+};
+window.moto_deleteTrip = function(id){
+  let trips = getJSON('motoPro_trips', []);
+  trips = trips.filter(x=>x.id!==id); setJSON('motoPro_trips', trips); renderTrips();
+};
+
+/* ---------- UI wiring ---------- */
+qs('#uiStyle').addEventListener('change', e=>{
+  appState.uiStyle = e.target.value; document.body.className = 'theme-' + appState.uiStyle; qs('#uiStyle2').value = appState.uiStyle; setJSON('motoPro_state', appState);
+});
+qs('#uiStyle2').addEventListener('change', e=>{ qs('#uiStyle').value = e.target.value; qs('#uiStyle').dispatchEvent(new Event('change')); });
+
+qs('#unitSelect').addEventListener('change', e=>{ appState.unit = e.target.value; setJSON('motoPro_state', appState); qs('#unitLabel').innerText = appState.unit.toUpperCase(); renderGauge(toDisplay(smoothedSpeed)); });
+qs('#gaugeStyle').addEventListener('change', e=>{ appState.gaugeStyle = e.target.value; setJSON('motoPro_state', appState); });
+qs('#gaugeMax').addEventListener('change', e=>{ appState.gaugeMax = Number(e.target.value) || 160; setJSON('motoPro_state', appState); });
+qs('#smoothing').addEventListener('change', e=>{ appState.smoothing = Number(e.target.value); setJSON('motoPro_state', appState); });
+qs('#updateRate').addEventListener('change', e=>{ appState.updateRate = Number(e.target.value); setJSON('motoPro_state', appState); });
+qs('#batterySaver').addEventListener('change', e=>{ appState.batterySaver = e.target.value; setJSON('motoPro_state', appState); });
+qs('#gaugeMax').addEventListener('input', ()=>{ /* reflect live */ });
+
+qs('#startTracking').addEventListener('click', ()=>{ startGPS(); });
+qs('#stopTracking').addEventListener('click', ()=>{ stopGPS(); });
+qs('#resetTrip').addEventListener('click', ()=>{ if(confirm('Reset trip distance and points?')){ totalDistance=0; tripPoints=[]; setJSON('motoPro_distance', 0); setJSON('motoPro_tripPoints', []); qs('#distance').innerText='0.00 km'; } });
+
+qs('#saveTrip').addEventListener('click', saveTrip);
+qs('#exportGPX').addEventListener('click', exportGPX);
+qs('#exportCSV').addEventListener('click', exportCSV);
+
+qs('#enableLean').addEventListener('click', ()=>{ enableLean(); qs('#enableLean').disabled=true; qs('#disableLean').disabled=false; });
+qs('#disableLean').addEventListener('click', ()=>{ disableLean(); qs('#enableLean').disabled=false; qs('#disableLean').disabled=true; });
+
+qs('#fsBtn').addEventListener('click', async ()=>{
+  try{ if(!document.fullscreenElement) await document.documentElement.requestFullscreen(); else await document.exitFullscreen(); }catch(e){console.warn(e)}
+});
+
+qs('#openSettings').addEventListener('click', ()=> qs('#settingsPanel').classList.toggle('hidden'));
+qs('#closeSettings').addEventListener('click', ()=> qs('#settingsPanel').classList.add('hidden'));
+qs('#openFullSettings').addEventListener('click', ()=> { qs('#settingsPanel').classList.add('hidden'); qs('#uiStyle').scrollIntoView({behavior:'smooth'}); });
+
+qs('#mirrorHUD').addEventListener('click', ()=>{
+  document.body.style.transform = document.body.style.transform === 'scaleX(-1)' ? '' : 'scaleX(-1)';
+});
+qs('#clearMax').addEventListener('click', ()=>{ if(confirm('Clear max speed and max lean?')){ maxSpeed=0; maxLean=0; setJSON('motoPro_maxSpeed', maxSpeed); setJSON('motoPro_maxLean', maxLean); qs('#maxSpeed').innerText='0'; qs('#lean').innerText='0°'; } });
+qs('#clearAll').addEventListener('click', ()=>{ if(confirm('Clear all saved data (trips, settings)?')){ localStorage.clear(); location.reload(); } });
+
+/* ---------- Restore persisted values ---------- */
+totalDistance = getJSON('motoPro_distance', totalDistance);
+maxSpeed = getJSON('motoPro_maxSpeed', maxSpeed);
+maxLean = getJSON('motoPro_maxLean', maxLean);
+tripPoints = getJSON('motoPro_tripPoints', tripPoints);
+renderTrips();
+
+/* ---------- Signal: initial empty bars ---------- */
+setSignalBars(0);
+
+/* ---------- Auto-start if previously tracking ---------- */
+if(appState.tracking){ startGPS(); qs('#startTracking').disabled=true; qs('#stopTracking').disabled=false; }
+
+/* ---------- Autosave state periodically ---------- */
+setInterval(()=>{ setJSON('motoPro_state', appState); }, 2000);
+
+/* ---------- Render loop (ensure gauge updates live) ---------- */
+setInterval(()=>{ renderGauge(toDisplay(smoothedSpeed)); }, Math.max(150, appState.updateRate || 500) );
+
+/* ---------- small helpers: show storage items in console for debugging ---------- */
+console.log('MotoHUD Pro loaded. state:', appState);
 </script>
 </body>
 </html>
