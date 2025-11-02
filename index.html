@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced GPS Speedometer</title>
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    color: white;
+    font-family: Arial, sans-serif;
+    text-align: center;
+  }
+  .speed {
+    font-size: 80px;
+    margin-top: 50px;
+    font-weight: bold;
+  }
+  .unit {
+    font-size: 25px;
+    opacity: 0.8;
+    margin-top: -10px;
+  }
+  .stats {
+    margin-top: 40px;
+    font-size: 18px;
+    opacity: 0.8;
+    line-height: 1.8em;
+  }
+  #settings {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #222;
+    padding: 10px 20px;
+    border-radius: 10px;
+  }
+  select {
+    padding: 5px;
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>GPS Speedometer</h1>
+
+<div class="speed" id="speed">0</div>
+<div class="unit" id="unit">KM/H</div>
+
+<div class="stats">
+  <div>Heading: <span id="heading">0</span>°</div>
+  <div>Altitude: <span id="altitude">0</span> m</div>
+  <div>Accuracy: <span id="accuracy">0</span> m</div>
+  <div>Lat: <span id="lat">0</span></div>
+  <div>Lng: <span id="lng">0</span></div>
+</div>
+
+<div id="settings">
+  <label>Units:</label>
+  <select id="unitSelect">
+    <option value="kmh" selected>KM/H</option>
+    <option value="mph">MPH</option>
+  </select>
+</div>
+
+<script>
+let unit = "kmh";
+
+document.getElementById("unitSelect").addEventListener("change", (e) => {
+  unit = e.target.value;
+  document.getElementById("unit").innerText = unit.toUpperCase();
+});
+
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition((pos) => {
+    let speed = pos.coords.speed; // m/s
+    if (!speed || speed < 0) speed = 0;
+
+    let converted = (unit === "mph")
+      ? speed * 2.23694
+      : speed * 3.6;
+
+    document.getElementById("speed").innerText = Math.round(converted);
+    document.getElementById("heading").innerText = Math.round(pos.coords.heading || 0);
+    document.getElementById("altitude").innerText = Math.round(pos.coords.altitude || 0);
+    document.getElementById("accuracy").innerText = Math.round(pos.coords.accuracy || 0);
+    document.getElementById("lat").innerText = pos.coords.latitude.toFixed(6);
+    document.getElementById("lng").innerText = pos.coords.longitude.toFixed(6);
+
+  }, (err) => {
+    console.log("GPS error:", err);
+  }, {
+    enableHighAccuracy: true,
+    maximumAge: 1000,
+    timeout: 5000
+  });
+} else {
+  alert("Your device does not support GPS.");
+}
+</script>
+
+</body>
+</html>
